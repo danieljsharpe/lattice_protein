@@ -11,6 +11,9 @@ TO DO:
 
 
 BUGS
+
 -chain crossings appear (rarely) - need to find what moves are causing this
+FIXED - the pivot moves were problematic. Needed to deepcopy() the coords which are changed in the pivot move function.
+
 -note that if no move type is available (e.g. no kink-jump move available and local_move_prob has kink-jump prob=1.) then the program
 will be caught in an infinite loop
