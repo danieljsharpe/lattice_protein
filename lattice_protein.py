@@ -49,7 +49,7 @@ class Lattice_Protein(object):
             [ 0.46, 0.34, 0.37,-0.15, 0.41, 0.38, 0.24,-0.11,-0.16, 0.43, 0.48, 0.26,-0.01, 0.00, 0.10,-0.75, 0.10, 0.40,-0.87, 0.45]
            ])
 
-    nbrs = np.array([[-1,0,0],[+1,0,0],[0,-1,0],[0,+1,0],[0,0,-1],[0,0,+1]], dtype=int) # neighbours in the six cardinal directions in 3D
+    nbrs = np.array([[-1,0,0],[+1,0,0],[0,-1,0],[0,+1,0],[0,0,-1],[0,0,+1]], dtype=int) # neighbours in the six cardinal direcs in 3D
 
     def __init__(self, protein=None, go_score=None, randseed=17, potential="bt"):
         self.protein = protein # amino acid sequence as a string
@@ -112,15 +112,17 @@ class Simulate_Protein(Lattice_Protein):
         self.global_move_prob = global_move_prob # probabilities for attempting reptation, pivot & reverse global moves, respectively
         self.local_move_prob = local_move_prob # probabilities for attempting kink-jump & crankshaft local moves, respectively
         self.annealing = annealing # after MC simulation run simulated annealing Y/N
+        self.p_acc_thresh_nsteps = p_acc_thresh_nsteps # no. of steps defining a block for which the acceptance prob. is calcd
         if self.annealing: # set a method and parameters for updating the temperature
             self.sa_steps = sa_steps # max. no. of steps in simulated annealing procedure
             self.alpha = alpha # cooling coeff for simulated annealing procedure
             self.p_acc_thresh = p_acc_thresh # set an acceptance prob. cutoff for terminating the algorithm
-            self.p_acc_thresh_nsteps = p_acc_thresh_nsteps # no. of steps defining a block for which the acceptance prob. is calcd
             self.T_thresh = T_thresh # set a temperature cutoff for terminating the algorithm
             if schedule == "exponential": self.cooling_func = Simulate_Protein.cooling_exponential
             elif schedule == "linear": self.cooling_func = Simulate_Protein.cooling_linear
             elif schedule == "logarithmic": self.cooling_func = Simulate_Protein.cooling_logarithmic
+        else: # if not doing simulated annealing, never let the main loop break because of temperature of acceptance prob criteria
+            self.T_thresh, self.p_acc_thresh = -float("inf"), -float("inf")
         return
 
     '''
@@ -167,7 +169,7 @@ class Simulate_Protein(Lattice_Protein):
             n_step += 1
             if n_step % self.p_acc_thresh_nsteps == 0: # check acceptance probability for block
                 p_accept = float(n_accept)/float(self.p_acc_thresh_nsteps)
-                p_accept = 1.0 # DEBUG - don't let the loop break because of p_accept
+                p_accept = 1.0 # DEBUGGING - don't let the loop break because of p_accept
                 n_accept = 0 # reset
             if annealing:
                 self.T = self.cooling_func(self.T, self.alpha)
@@ -230,7 +232,8 @@ Note: the arguments to the Simulate_Protein subclass are passed as args
       the arguments to the Simulate_Protein subclass needed by the Lattice_Protein superclass are passed as kwargs
 '''
 def drive_simulation(N_walkers, T_min, T_max, tot_nsteps, exchange_interval, *args, **kwargs):
-    delta_T = (T_max - T_min) / float(N_walkers-1)
+    if N_walkers > 1: delta_T = (T_max - T_min) / float(N_walkers-1)
+    else: delta_T = 0.
     print "Setting up %i MC walkers with T_min = %.3f, T_max = %.3f, delta_t = %.3f" % (N_walkers,T_min,T_max,delta_T)
     print "Total number of MC steps: %i   Steps in a single block before replica exchange attempt: %i" \
           % (tot_nsteps, exchange_interval)
@@ -247,12 +250,14 @@ def drive_simulation(N_walkers, T_min, T_max, tot_nsteps, exchange_interval, *ar
             print "WALKER %i" % (i+1)
             if block < n_blocks:
                 walker.monte_carlo()
+                visualise_protein.plot_protein(walker.protein,walker.coords)
             elif walker.annealing and block == n_blocks:
                 walker.monte_carlo(annealing=True)
                 visualise_protein.plot_protein(walker.protein,walker.coords)
             elif not walker.annealing and block == n_blocks:
                 break
         if block == n_blocks: break
+        if N_walkers == 1: continue # only have one walker, no replica exchange
         while True:
             walker_idx = np.random.randint(N_walkers) # choose a walker at random
             if temp_order[walker_idx] != N_walkers-1: break # don't choose the highest temp walker

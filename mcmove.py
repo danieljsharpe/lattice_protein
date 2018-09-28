@@ -35,7 +35,7 @@ def propose_pivot_move(latt, coords):
     search_dir = np.random.choice([-1,1])  # choose a search direction along the chain to find valid pivot moves
     while pivot_res >= 2 and pivot_res <= Nres-2:
         try:
-            new_latt, new_coords = pivot(latt, coords, pivot_res, search_dir)
+            new_latt, new_coords = pivot(latt, deepcopy(coords), pivot_res, search_dir)
         except MoveError:
             pivot_res += search_dir
             if pivot_res < 2 or pivot_res > Nres-2: raise
@@ -88,7 +88,7 @@ def pivot(latt, coords, pivot_res, search_dir):
         stat_segment = deque(islice(coords,pivot_res_orig,Nres)) # segment of protein that stays put
     elif search_dir == +1:
         stat_segment = deque(islice(coords,0,pivot_res_orig))
-    pivot_res = deepcopy(pivot_res_orig) + 1
+    pivot_res = deepcopy(pivot_res_orig)
     for i in range(Nres-pivot_res_orig-1):
         if coords[pivot_res] in stat_segment:
             raise MoveError # there is a clash
@@ -123,7 +123,6 @@ def kink_jump(latt, coords):
 
 # function to perform local crankshaft move
 def crankshaft(latt, coords):
-#    print "coords on entering crankshaft function:\n", coords
     crank_sites = []
     move_success = False
     for i in range(len(coords)-3):
@@ -132,41 +131,30 @@ def crankshaft(latt, coords):
     if not crank_sites: raise MoveError
     while crank_sites:
         crank_sites_idx = np.random.randint(len(crank_sites))
-#        print "crank sites are:", crank_sites, "\nchosen crank site:", crank_sites[crank_sites_idx]
-#        print "coords of crank sites:", coords[crank_sites[crank_sites_idx][0]], coords[crank_sites[crank_sites_idx][1]]
         crank_axis = np.array(coords[crank_sites[crank_sites_idx][0]]) - np.array(coords[crank_sites[crank_sites_idx][1]])
-#        print "crank axis:", crank_axis
         crank_ax_idcs = np.where(crank_axis==0)[0]
         crank_moves = [0,1,2]
         while crank_moves:
             crank_move_idx = np.random.randint(len(crank_moves))
-#            print "Attempting a crank move... type", crank_moves[crank_move_idx]
             crank_move = crank_moves[crank_move_idx]
             # section of protein chain that remains stationary (either side of residues forming the crank)
             stat_segment = deque(list(islice(coords,0,crank_sites[crank_sites_idx][0])) + \
                                  list(islice(coords,crank_sites[crank_sites_idx][1]+1,len(coords))))
             crank_segment = deque(islice(coords,crank_sites[crank_sites_idx][0]+1,crank_sites[crank_sites_idx][1]))
-#            print "crank_segment:", crank_segment
             new_crank_segment = deepcopy(crank_segment)
             try:
                 res = 0
                 for res_coord in crank_segment:
-#                    print "res # of crank:", res, "res_coord:", res_coord
                     if crank_move == 0 or crank_move == 2:
                         delta_1 = np.array(res_coord[crank_ax_idcs[1]]) - \
                                   np.array(coords[crank_sites[crank_sites_idx][0]][crank_ax_idcs[1]])
                         delta_2 = np.array(res_coord[crank_ax_idcs[0]]) - \
                                   np.array(coords[crank_sites[crank_sites_idx][0]][crank_ax_idcs[0]])
-#                        print "delta_1", delta_1, "delta_2", delta_2
                         if crank_move == 0: # quarter-turn
-#                            print "quarter-turn"
-#                            print coords[crank_sites[crank_sites_idx][0]]
-#                            print coords[crank_sites[crank_sites_idx][0]][crank_ax_idcs[0]]
                             new_crank_segment[res][crank_ax_idcs[0]] = coords[crank_sites[crank_sites_idx][0]][crank_ax_idcs[0]] \
                                     - delta_1
                             new_crank_segment[res][crank_ax_idcs[1]] = coords[crank_sites[crank_sites_idx][0]][crank_ax_idcs[1]] \
                                     - delta_2
-#                            print "new_crank_segment is now:", new_crank_segment
                         elif crank_move == 2: # three-quarter-turn
                             new_crank_segment[res][crank_ax_idcs[0]] = coords[crank_sites[crank_sites_idx][0]][crank_ax_idcs[0]] \
                                     + delta_1
@@ -177,22 +165,16 @@ def crankshaft(latt, coords):
                             new_crank_segment[res][crank_ax_idcs[i]] -= 2*(new_crank_segment[res][crank_ax_idcs[i]] - \
                                             coords[crank_sites[crank_sites_idx][0]][crank_ax_idcs[i]])
                     if new_crank_segment[res] in stat_segment:
-#                        print "CLASH WITH STAT_SEGMENT"
                         raise MoveError # there is a clash
                     res += 1
                 move_success = True
-#                print "Move has been successfully accepted"
                 break
             except MoveError:
-#                print "Excepting the MoveError"
                 del crank_moves[crank_move_idx]
-#                print "crank moves are now:", crank_moves
                 continue
         if move_success: break
     if not crank_sites: raise MoveError
     j = 0
-#    print "new_crank_segment", new_crank_segment
-#    print "crank_sites", crank_sites[crank_sites_idx][0], crank_sites[crank_sites_idx][1]
     for i in range(crank_sites[crank_sites_idx][0]+1,crank_sites[crank_sites_idx][1]):
         coords[i] = new_crank_segment[j]
         j += 1
